@@ -10,6 +10,7 @@ The download prototype is from:
     - nissle_download_prototype
         http://help.brain-map.org/display/api/Downloading+an+Image
 """
+
 import os
 import shutil
 import requests
