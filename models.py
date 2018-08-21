@@ -12,7 +12,24 @@ from keras.models import Model
 from keras.losses import binary_crossentropy, mean_squared_error, categorical_crossentropy
 from keras.optimizers import Adam
 import matplotlib
+from itertools import product
+from functools import partial
+import scipy.misc
+
 matplotlib.use('Agg')
+
+
+def w_binary_crossentropy(y_true, y_pred):
+    weights = np.array([[1, 1], [1, 1]])
+    # tmp = np.ones(y_pred.shape)
+    cross_results = K.binary_crossentropy(y_true, y_pred)
+    return K.mean(cross_results, axis=1)
+
+# ncce = partial(w_binary_crossentropy, weights=np.array([[1, 1],[1,1]]))
+
+def my_binary_crossentropy(y_true, y_pred):
+    return K.mean(K.binary_crossentropy(y_true, y_pred), axis=-1)
+
 
 class SegFCNet:
     def __init__(self, model_path):
@@ -54,7 +71,7 @@ class SegFCNet:
 
     def train(self, x_data, y_data, lr=0.002, N_epoch=20, batch_size=16, validation_split=0.01):
         image_shape = x_data.shape[1:]
-        class_weight = {0: 1, 1: np.sum(y_data == 0) / np.sum(y_data == 1)}
+        class_weights = {0: 1, 1: np.sum(y_data == 0) / np.sum(y_data == 1)}
         print("class weight: 1:{:.2f}".format(np.sum(y_data == 0) / np.sum(y_data == 1)))
         y_data = to_categorical(y_data)
         model = self.build_model(image_shape)
@@ -68,8 +85,8 @@ class SegFCNet:
                        validation_split=validation_split, callbacks=[checkpointer])
         # fig = plt.figure()
         # plt.plot(hist.history['loss'], '-o')
-        # plt.plot(hist.history['val_loss'], 'g-o')
-        # plt.legend(['loss', 'val_loss'])
+        # # plt.plot(hist.history['val_loss'], 'g-o')
+        # # plt.legend(['loss', 'val_loss'])
         # fig.savefig('seg_train_convergence.png', format='png', bbox_inches='tight', dpi=900)
         # plt.close()
 
@@ -79,7 +96,6 @@ class SegFCNet:
         img = np.expand_dims(img, axis=0)
         img = np.expand_dims(img, axis=3)
 
-
         image_shape = img.shape[1:]
         model = self.build_model(image_shape)
         # model.compile()
@@ -88,10 +104,10 @@ class SegFCNet:
         predict_results = model.predict(img, verbose=1)
         prob_map = np.squeeze(predict_results[:, :, :, 1])
 
-        fig = plt.figure()
-        plt.imshow(prob_map, cmap='plasma')  # default is 'viridis'
-        plt.colorbar()
-        fig.savefig('seg_prob_map.png', format='png', bbox_inches='tight', dpi=900)
-        plt.close()
-
+        # fig = plt.figure()
+        # plt.imshow(prob_map, cmap='plasma')  # default is 'viridis'
+        # plt.colorbar()
+        # fig.savefig('seg_prob_map.png', format='png', bbox_inches='tight', dpi=900)
+        # plt.close()
+        scipy.misc.imsave('outfile.jpg', (prob_map*200).astype(np.uint8))
         return prob_map
