@@ -21,7 +21,52 @@ class DGAugmentation:
         self.target_size = None
         self.dg_color = None
 
-    def load_data(self, read_path, sub_folders, coronal_dg_list, target_size, dg_color, intensity_aug_num, geo_aug_num):
+    def check_valid_imgs(self, read_path, target_color):
+        img_list = os.listdir(read_path)
+        # --- sort the image name
+        img_list = [img_name for _, img_name in sorted(zip(
+            [int(i.split("_")[0]) for i in img_list], img_list))]
+
+        for img_name in img_list:
+            label_img = cv2.imread(os.path.join(read_path,img_name), 1)
+            mask = np.logical_and(label_img[:, :, 0] == target_color[0],
+                                  label_img[:, :, 1] == target_color[1],
+                                  label_img[:, :, 2] == target_color[2])
+            # --- rendered png from the svg may change the color on some boundaries
+            kernel = np.ones((3, 3), np.uint8)
+            opened_mask = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_OPEN, kernel)
+
+            if opened_mask.sum() != 0:
+                print("{} contain target color".format(img_name))
+
+    def load_half_coronal_data(self, read_path, sub_folders, coronal_dg_list, target_size, dg_color,
+                               intensity_aug_num, geo_aug_num):
+        self.target_size = target_size
+        self.dg_color = dg_color
+
+        img_list = os.listdir(os.path.join(read_path, sub_folders[0]))
+        # --- sort the image name
+        img_list = [img_name for _, img_name in sorted(zip(
+            [int(i.split("_")[0]) for i in img_list], img_list))]
+        read_list = [img_list[i] for i in coronal_dg_list]
+
+        x_data = np.zeros([len(read_list)] + target_size)
+        y_data = np.zeros([len(read_list)] + target_size)
+        for idx, img_name in enumerate(read_list):
+            [img_idx, img_format] = img_name.split('.')
+            x_data[idx, :, :], y_data[idx, :, :] = self.get_one_pair(read_path, sub_folders, img_idx)
+
+        aug_imgs, aug_labels = self.intensity_augmentation(x_data, y_data, aug_num=intensity_aug_num,
+                                                           gamma_bound=(0.01, 1), intensity_bound=(1/3, 1))
+        aug_merged_imgs = self.geometric_augmentation(aug_imgs, aug_labels,
+                                                      round_labels=True, aug_number=geo_aug_num)
+
+        x_data = np.expand_dims(aug_merged_imgs[:, :, :, 0], axis=3)
+        y_data = np.expand_dims(aug_merged_imgs[:, :, :, 2], axis=3)
+        return x_data, y_data
+
+
+    def load_coronal_data(self, read_path, sub_folders, coronal_dg_list, target_size, dg_color, intensity_aug_num, geo_aug_num):
         self.target_size = target_size
         self.dg_color = dg_color
 
@@ -51,26 +96,44 @@ class DGAugmentation:
         dg_color = self.dg_color
         nissle_img = cv2.imread(os.path.join(dir_path, sub_folders[0], img_idx + '.jpg'), 0)
         label_img = cv2.imread(os.path.join(dir_path, sub_folders[1], img_idx + '.png'), 1)
-        mask = np.logical_and(label_img[:, :, 0] == dg_color[0],
-                              label_img[:, :, 1] == dg_color[1],
-                              label_img[:, :, 2] == dg_color[2])
-        if mask.sum() == 0:
+        # --- first resize label_img to the nissle_img
+        if nissle_img.shape[0] / label_img.shape[0] != nissle_img.shape[1] / label_img.shape[1]:
+            print("ERROR: mask and nissle images do not match!")
             return None
 
+        # --- extract the dg_mask
+        dg_mask = np.all(label_img == dg_color, axis=2)
+        kernel = np.ones((3, 3), np.uint8)
+        dg_mask = cv2.morphologyEx(dg_mask.astype(np.uint8), cv2.MORPH_OPEN, kernel)
+        if dg_mask.sum() == 0:
+            return None
+        dg_mask = cv2.resize(dg_mask.astype(np.float), dsize=tuple(reversed(nissle_img.shape)))
+
+
+        # --- crop the mask and nissle images
+        label_mask = np.logical_not(np.all(label_img == [255, 255, 255], axis=2))
+        label_mask = cv2.resize(label_mask.astype(np.float), dsize=tuple(reversed(nissle_img.shape)))
+
+        row_index, col_index = np.where(label_mask)
+        start_row = row_index.min()
+        end_row = row_index.max()
+        start_col = col_index.min()
+        end_col = col_index.max()
+
+        dg_mask = dg_mask[start_row: end_row, start_col:end_col]
+        nissle_img = nissle_img[start_row: end_row, start_col:end_col]
+
+        # --- resize both mask and nissle images to the target size
         resize_width = target_size[0] / nissle_img.shape[0]
         resize_heigth = target_size[1] / nissle_img.shape[1]
         resize_ratio = min(resize_heigth, resize_width)
         resized_nissle_img = cv2.resize(nissle_img.astype(np.float), dsize=None, fx=resize_ratio, fy=resize_ratio)
-
-        resize_width = target_size[0] / mask.shape[0]
-        resize_heigth = target_size[1] / mask.shape[1]
-        resize_ratio = min(resize_heigth, resize_width)
-        resized_mask = cv2.resize(mask.astype(np.float), dsize=None, fx=resize_ratio, fy=resize_ratio)
+        resized_dg_mask = cv2.resize(dg_mask.astype(np.float), dsize=None, fx=resize_ratio, fy=resize_ratio)
 
         x_data = np.zeros(target_size)
         y_data = np.zeros(target_size)
         x_data[:resized_nissle_img.shape[0], :resized_nissle_img.shape[1]] = resized_nissle_img
-        y_data[:resized_mask.shape[0], :resized_mask.shape[1]] = resized_mask
+        y_data[:resized_dg_mask.shape[0], :resized_dg_mask.shape[1]] = resized_dg_mask
         return x_data, y_data
 
     @staticmethod
@@ -123,17 +186,21 @@ class DGAugmentation:
 
 def main():
     # --- coronal images that contain dg: list(range(22, 31)) + list(range(93, 100)) + list(range(101, 107))
-    read_path = "/mnt/hdd/local_data/ABA/coronal"
+    # --- half_coronal images that contain dg: list(range(1, 16)) + list(range(48, 60)) + list(range(123, 124))
+    read_path = "/mnt/hdd/local_data/ABA/half_coronal"
     sub_folders = ["nissle", "svg2png"]
-    target_size = [300, 450]
+    target_size = [300, 225]
     dg_color = [61, 168, 102]  # BGR. HEX: 0x66A83D
     intensity_aug_num = 2
     geo_aug_num = 2
 
-    coronal_dg_list = list(range(22, 31)) + list(range(93, 100)) + list(range(101, 107))
+    # coronal_dg_list = list(range(22, 31)) + list(range(93, 100)) + list(range(101, 107))
+    half_coronal_dg_list = [9]
 
     data_aug = DGAugmentation()
-    x_data, y_data = data_aug.load_data(read_path, sub_folders, coronal_dg_list,
+    # data_aug.check_valid_imgs(read_path, dg_color)
+
+    x_data, y_data = data_aug.load_half_coronal_data(read_path, sub_folders, half_coronal_dg_list,
                                         target_size, dg_color, intensity_aug_num, geo_aug_num)
 
 
