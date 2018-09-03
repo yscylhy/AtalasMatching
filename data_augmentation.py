@@ -143,7 +143,7 @@ class DGAugmentation:
         aug_imgs = np.repeat(org_img, repeats=aug_num, axis=0)
         aug_labels = np.repeat(org_label, repeats=aug_num, axis=0)
 
-        for i in range(aug_num):
+        for i in range(aug_imgs.shape[0]):
             gamma_value = np.random.uniform(gamma_bound[0], gamma_bound[1])
             intensity_suppression = np.random.uniform(intensity_bound[0], intensity_bound[1])
 
@@ -195,7 +195,7 @@ def main():
     geo_aug_num = 2
 
     # coronal_dg_list = list(range(22, 31)) + list(range(93, 100)) + list(range(101, 107))
-    half_coronal_dg_list = [9]
+    half_coronal_dg_list = [9, 10]
 
     data_aug = DGAugmentation()
     # data_aug.check_valid_imgs(read_path, dg_color)
