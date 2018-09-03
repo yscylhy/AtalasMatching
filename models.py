@@ -9,7 +9,7 @@ import tensorflow as tf
 import keras.backend as K
 from keras.layers import Input, Conv2D, MaxPooling2D, Dropout, Flatten, UpSampling2D, concatenate
 from keras.models import Model
-from keras.losses import binary_crossentropy, mean_squared_error, categorical_crossentropy
+from keras.losses import binary_crossentropy, mean_absolute_error, mean_squared_error,categorical_crossentropy
 from keras.optimizers import Adam
 import matplotlib
 from itertools import product
@@ -39,14 +39,16 @@ class DGBoxNet:
     def build_model(self, input_shape):
         inputs = Input(shape=input_shape)
 
-        conv1 = Conv2D(32, (5, 5), activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
+        conv1 = Conv2D(32, (7, 7), activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
         pool1 = MaxPooling2D((2, 2), strides=(2, 2))(conv1)
-        conv2 = Conv2D(64, (5, 5), activation='relu', padding='same', kernel_initializer='he_normal')(pool1)
+        conv2 = Conv2D(64, (7, 7), activation='relu', padding='same', kernel_initializer='he_normal')(pool1)
         pool2 = MaxPooling2D((2, 2), strides=(2, 2))(conv2)
-        conv3 = Conv2D(128, (5, 5), activation='relu', padding='same', kernel_initializer='he_normal')(pool2)
+        conv3 = Conv2D(128, (7, 7), activation='relu', padding='same', kernel_initializer='he_normal')(pool2)
         pool3 = MaxPooling2D((2, 2), strides=(2, 2))(conv3)
-        drop3 = Dropout(0.4)(pool3)
-        outputs = Conv2D(4, (35, 25), activation='relu', padding='valid', kernel_initializer='he_normal')(drop3)
+        conv4 = Conv2D(256, (7, 7), activation='relu', padding='same', kernel_initializer='he_normal')(pool3)
+        pool4 = MaxPooling2D((2, 2), strides=(2, 2))(conv4)
+        drop4 = Dropout(0.1)(pool4)
+        outputs = Conv2D(4, (20, 16), activation='relu', padding='valid', kernel_initializer='he_normal')(drop4)
         outputs = Flatten()(outputs)
         model = Model(input=inputs, output=outputs)
 

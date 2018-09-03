@@ -13,7 +13,7 @@ import matplotlib.image as mpimg
 import os
 import cv2
 from keras.preprocessing.image import ImageDataGenerator
-
+import matplotlib.patches as patches
 
 class DGAugmentation:
 
@@ -53,8 +53,22 @@ class DGAugmentation:
             [img_idx, img_format] = img_name.split('.')
             x_data[idx, :, :], y_data[idx, :, :] = self.get_one_pair(read_path, sub_folders, img_idx)
 
+        # y_data = np.expand_dims(y_data, axis=3)
+        # y_data = self.get_bounding_box(y_data)
+        # for idx, img in enumerate(x_data):
+        #     fig, ax = plt.subplots(1)
+        #     ax.imshow(img)
+        #     start_row = y_data[idx, 0]
+        #     start_col = y_data[idx, 1]
+        #     row_len = y_data[idx, 2]
+        #     col_len = y_data[idx, 3]
+        #     rect = patches.Rectangle((start_col, start_row), col_len, row_len,
+        #                              linewidth=1, edgecolor='r', facecolor='none')
+        #     ax.add_patch(rect)
+        #     plt.close()
+
         aug_imgs, aug_labels = self.intensity_augmentation(x_data, y_data, aug_num=intensity_aug_num,
-                                                           gamma_bound=(0.01, 1), intensity_bound=(1/3, 1))
+                                                           gamma_bound=(0.9, 1.1), intensity_bound=(0.99, 1))
         aug_merged_imgs = self.geometric_augmentation(aug_imgs, aug_labels,
                                                       round_labels=True, aug_number=geo_aug_num)
 
@@ -64,7 +78,6 @@ class DGAugmentation:
         y_data = self.get_bounding_box(y_data)
 
         return x_data, y_data
-
 
     def load_coronal_data(self, read_path, sub_folders, coronal_dg_list, target_size, dg_color, intensity_aug_num, geo_aug_num):
         self.target_size = target_size
@@ -177,7 +190,7 @@ class DGAugmentation:
 
     @staticmethod
     def geometric_augmentation(org_img, org_label, round_labels=True, aug_number=5, rotation_range=360, h_flip=True,
-                               v_flip=True, fill_mode='reflect'):
+                               v_flip=True, fill_mode='constant'):
 
         merge_img = np.zeros(org_img.shape + (3,))
         merge_img[:, :, :, 0] = org_img
@@ -190,7 +203,8 @@ class DGAugmentation:
             rotation_range=rotation_range,
             horizontal_flip=h_flip,
             vertical_flip=v_flip,
-            fill_mode=fill_mode)
+            fill_mode=fill_mode,
+            cval=0)
 
         for _idx, batch in enumerate(data_gen.flow(merge_img, batch_size=input_img_num)):
             aug_merge_imgs[_idx*input_img_num: (_idx+1)*input_img_num] = batch
@@ -219,10 +233,6 @@ def main():
 
     data_aug = DGAugmentation()
     # data_aug.check_valid_imgs(read_path, dg_color)
-
-    x_data, y_data = data_aug.load_half_coronal_data(read_path, sub_folders, half_coronal_dg_list,
-                                        target_size, dg_color, intensity_aug_num, geo_aug_num)
-
 
 if __name__ == "__main__":
     main()
